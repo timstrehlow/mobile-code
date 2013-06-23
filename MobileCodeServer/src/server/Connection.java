@@ -10,6 +10,8 @@ import java.net.Socket;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import wrapper.JobWrapper;
+
 /**
  *
  * @author Patrick
@@ -56,7 +58,7 @@ public class Connection implements Runnable {
 				
 				try {
 					final JobWrapper job = (JobWrapper) inputObject;
-
+					
 					// TODO
 
 				} catch (ClassCastException e) {
