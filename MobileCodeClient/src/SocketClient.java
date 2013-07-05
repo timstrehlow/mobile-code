@@ -3,7 +3,6 @@
  * and open the template in the editor.
  */
 
-
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -19,39 +18,39 @@ import wrapper.JobWrapper;
 import wrapper.MethodWrapper;
 
 /**
- *
+ * 
  * @author Patrick
  */
 public class SocketClient implements Runnable {
 	private static final String SOURCE_FILE = "HelloWorld.java";
 	private static final String BYTE_FILE = "HelloWorld.class";
 
-    public static int count = 0;
-    private String name;
+	public static int count = 0;
+	private String name;
 
-    public static void main(String[] args) throws IOException {
+	public static void main(String[] args) throws IOException {
 
-        SocketClient client = new SocketClient("1");
+		SocketClient client = new SocketClient("1");
 
-    }
+	}
 
-    public SocketClient(String name) {
-        this.name = name;
-        new Thread(this).start();
-    }
+	public SocketClient(String name) {
+		this.name = name;
+		new Thread(this).start();
+	}
 
-    @Override
-    public void run() {
+	@Override
+	public void run() {
 		ObjectOutputStream outputStream = null;
-        try {
-            SocketClient.count++;
-            Socket recievSocket = new Socket("localhost", 4321);
-            Socket sendSocket = new Socket("localhost", 1234);
+		try {
+			SocketClient.count++;
+			Socket recievSocket = new Socket("localhost", 4321);
+			Socket sendSocket = new Socket("localhost", 1234);
 
-            System.out.println("Connect with server (" + sendSocket.getPort() + " / " + recievSocket.getPort() + ")");
+			System.out.println("Connect with server (" + sendSocket.getPort()
+					+ " / " + recievSocket.getPort() + ")");
 
-			outputStream = new ObjectOutputStream(
-					sendSocket.getOutputStream());
+			outputStream = new ObjectOutputStream(sendSocket.getOutputStream());
 			JobWrapper job = new JobWrapper();
 			job.setCode(readCodeFromFile(new File(SOURCE_FILE)));
 			job.setFileName(SOURCE_FILE);
@@ -65,10 +64,12 @@ public class SocketClient implements Runnable {
 
 			outputStream.writeObject(job);
 
-        } catch (UnknownHostException ex) {
-            Logger.getLogger(SocketClient.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (IOException ex) {
-            Logger.getLogger(SocketClient.class.getName()).log(Level.SEVERE, null, ex);
+		} catch (UnknownHostException ex) {
+			Logger.getLogger(SocketClient.class.getName()).log(Level.SEVERE,
+					null, ex);
+		} catch (IOException ex) {
+			Logger.getLogger(SocketClient.class.getName()).log(Level.SEVERE,
+					null, ex);
 		} finally {
 			if (outputStream != null) {
 				try {
@@ -79,7 +80,11 @@ public class SocketClient implements Runnable {
 				}
 			}
 		}
-    }
+	}
+
+	public static void initMethodWrapper() {
+
+	}
 
 	private static char[] readCodeFromFile(File f) {
 
