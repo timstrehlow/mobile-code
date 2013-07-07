@@ -1,13 +1,15 @@
 package server;
 
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
-import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
@@ -16,7 +18,7 @@ import java.lang.reflect.Modifier;
 import java.net.MalformedURLException;
 import java.net.Socket;
 import java.net.URL;
-import java.net.URLClassLoader;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -26,10 +28,9 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 
-import de.tu_berlin.kbs.reflect.InvokeThis;
-
 import wrapper.JobWrapper;
 import wrapper.MethodWrapper;
+import de.tu_berlin.kbs.reflect.InvokeThis;
 
 /**
  * 
@@ -37,17 +38,18 @@ import wrapper.MethodWrapper;
  */
 public class Connection implements Runnable {
 
-	private Socket clientReceiveSocket;
-	private Socket clientSendSocket;
-
+	private final Socket clientReceiveSocket;
+	private final Socket clientSendSocket;
+	private final int id;
 	/**
 	 * 
 	 * @param sender
 	 * @param reciever
 	 */
-	public Connection(Socket sender, Socket reciever) {
+	public Connection(Socket sender, Socket reciever, int id) {
 		this.clientReceiveSocket = reciever;
 		this.clientSendSocket = sender;
+		this.id = id;
 	}
 
 	/**
@@ -59,7 +61,7 @@ public class Connection implements Runnable {
 		PrintWriter out = null;
 
 		ObjectInputStream objectInputStream = null;
-		DataOutputStream outData = null;
+		ObjectOutputStream objectOutputStream = null;
 
 		try {
 			System.out.println("Client has connected");
@@ -70,7 +72,7 @@ public class Connection implements Runnable {
 
 			objectInputStream = new ObjectInputStream(
 					clientSendSocket.getInputStream());
-			outData = new DataOutputStream(
+			objectOutputStream = new ObjectOutputStream(
 					clientReceiveSocket.getOutputStream());
 
 			Object inputObject = objectInputStream.readObject();
@@ -78,15 +80,20 @@ public class Connection implements Runnable {
 			try {
 				final JobWrapper job = (JobWrapper) inputObject;
 
-				File codeFile = saveJobCodeFile(job);
+				final String classDir = "temp/" + id;
+				File codeFile = saveJobCodeFile(job, classDir);
+
+				char[] code = job.getCode();
 
 				if (job.getFileName().endsWith(".java")) {
 					compileJavaFile(codeFile);
+					code = readCodeFromClassFile(classDir);
 				}
+				loadClassAndExecMethods(code, classDir,
+ job);
 
-				loadClassAndExecMethods(job.getBinaryClassName(), "temp",
-						job.getMethodCalls());
-				// TODO
+				objectOutputStream.writeObject(job);
+				deleteDir(new File(classDir));
 
 			} catch (ClassCastException e) {
 				e.printStackTrace();
@@ -100,7 +107,7 @@ public class Connection implements Runnable {
 				if (out != null) {
 					out.close();
 					in.close();
-					outData.close();
+					objectOutputStream.close();
 					objectInputStream.close();
 					clientReceiveSocket.close();
 					clientSendSocket.close();
@@ -112,14 +119,48 @@ public class Connection implements Runnable {
 		}
 	}
 
-	private static File saveJobCodeFile(final JobWrapper job) {
-		final String tempDirName = "temp";
+	private char[] readCodeFromClassFile(String classDir) {
+		File classDirF = new File(classDir);
 
-		final File tmpDir = new File(tempDirName);
+		for (final File f : classDirF.listFiles()) {
+			if (!f.getAbsolutePath().endsWith(".class")) {
+				continue;
+			}
+			byte[] mybytearray = new byte[(int) f.length()];
+			FileInputStream fis = null;
+			try {
+				fis = new FileInputStream(f);
+			} catch (FileNotFoundException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+			BufferedInputStream bis = new BufferedInputStream(fis);
+			try {
+				bis.read(mybytearray, 0, mybytearray.length);
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+
+			char[] charArray = new char[(int) f.length()];
+			for (int i = 0; i < charArray.length; i++) {
+				charArray[i] = (char) mybytearray[i];
+			}
+
+			return charArray;
+			}
+		return null;
+		}
+
+	private static File saveJobCodeFile(final JobWrapper job,
+			final String classDir) {
+
+
+		final File tmpDir = new File(classDir);
 		if (!tmpDir.exists()) {
 			tmpDir.mkdir();
 		}
-		final String filePath = tempDirName + "/" + job.getFileName();
+		final String filePath = classDir + "/" + job.getFileName();
 		File file = new File(filePath);
 
 		if (!file.exists()) {
@@ -157,6 +198,7 @@ public class Connection implements Runnable {
 	}
 
 	private static void compileJavaFile(final File file) {
+
 		File[] files1 = { file };
 
 		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
@@ -167,7 +209,6 @@ public class Connection implements Runnable {
 				.getJavaFileObjectsFromFiles(Arrays.asList(files1));
 		compiler.getTask(null, fileManager, null, null, null, compilationUnits1)
 				.call();
-
 		try {
 			fileManager.close();
 		} catch (IOException e) {
@@ -176,11 +217,16 @@ public class Connection implements Runnable {
 		}
 	}
 
-	private static void loadClassAndExecMethods(String binaryClassName,
-			String classDir, final MethodWrapper[] methods) {
-		classDir = "temp";
+	private void loadClassAndExecMethods(char[] code, String classDir,
+			final JobWrapper job) {
+		MethodWrapper[] methods = job.getMethodCalls();
 		// Create a File object on the root of the directory containing the
 		// class file
+		if (methods == null) {
+			methods = new MethodWrapper[0];
+		}
+		ArrayList<MethodWrapper> methodsToAdd = new ArrayList<MethodWrapper>();
+		
 		File file = new File(classDir);
 
 		try {
@@ -188,30 +234,25 @@ public class Connection implements Runnable {
 			URL url = file.toURI().toURL();
 			URL[] urls = new URL[] { url };
 
-			// Create a new class loader with the directory
-			ClassLoader cl = new URLClassLoader(urls);
+			byte[] byteCode = new byte[code.length];
+			for (int i = 0; i < code.length; i++) {
+				byteCode[i] = (byte) code[i];
+			}
 
-			// Load in the class; MyClass.class should be located in
-			// the directory file:/c:/myclasses/com/mycompany
-			Class cls = cl.loadClass(binaryClassName);
+			CustomClassLoader cl = new CustomClassLoader();
 
-			for (final Method method : cls.getMethods()) {
-				for (final MethodWrapper mw : methods) {
-					Object instance = cls.newInstance();
-					Object object = null;
-					Method invokingMethod = getStaticAuthorizedMethod(method);
-					invokingMethod = (mw.getName().equals(method.getName())) ? method
-							: invokingMethod;
-					if (invokingMethod != null) {
+			Class cls = cl.loadClass(byteCode);
+
+			for (final MethodWrapper mw : methods) {
+				for (final Method method : cls.getMethods()) {
+					if (method.getName().equals(mw.getName())
+							&& ((mw.getArgs() == null && method
+									.getParameterTypes().length == 0) || method
+									.getParameterTypes().length == mw.getArgs().length)) {
+						Object object = null;
 						try {
-							if (Modifier
-									.isStatic(invokingMethod.getModifiers())) {
-								object = invokingMethod.invoke(null,
-										mw.getArgs());
-							} else {
-								object = invokingMethod.invoke(instance,
-										mw.getArgs());
-							}
+							object = method.invoke(mw.getInstance(),
+									mw.getArgs());
 						} catch (IllegalArgumentException e) {
 							e.printStackTrace();
 						} catch (IllegalAccessException e) {
@@ -222,18 +263,54 @@ public class Connection implements Runnable {
 
 						System.out.println("Result: " + object);
 						mw.setResult(object);
+						break;
 					}
 				}
 			}
+
+			for (final Method method : cls.getMethods()) {
+				Object object = null;
+				Method invokingMethod = null;
+				if (isMethodAnnotated(method)) {
+					invokingMethod = method;
+				}
+				if (invokingMethod != null) {
+						try {
+						if (Modifier.isStatic(invokingMethod.getModifiers())) {
+							MethodWrapper mw = new MethodWrapper();
+							mw.setName(invokingMethod.getName());
+							object = invokingMethod.invoke(null, null);
+							mw.setResult(object);
+							methodsToAdd.add(mw);
+
+						}
+						} catch (IllegalArgumentException e) {
+							e.printStackTrace();
+						} catch (IllegalAccessException e) {
+							e.printStackTrace();
+						} catch (InvocationTargetException e) {
+							e.printStackTrace();
+					}
+
+						System.out.println("Result: " + object);
+							}
+						}
+
 		} catch (MalformedURLException e) {
 		} catch (ClassNotFoundException e) {
-		} catch (InstantiationException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IllegalAccessException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
 		}
+
+		MethodWrapper[] allMethods = new MethodWrapper[methodsToAdd.size()
+				+ methods.length];
+		int index = 0;
+		for (final MethodWrapper mw : methods) {
+			allMethods[index++] = mw;
+		}
+		for (final MethodWrapper mw : methodsToAdd) {
+			allMethods[index++] = mw;
+		}
+
+		job.setMethodCalls(allMethods);
 	}
 
 	/**
@@ -241,14 +318,47 @@ public class Connection implements Runnable {
 	 * @param method
 	 * @return
 	 */
-	private static Method getStaticAuthorizedMethod(Method method) {
+	private static boolean isMethodAnnotated(Method method) {
+
 		Annotation[] annotations = method.getAnnotations();
 		for (Annotation annotation : annotations) {
 			if (annotation instanceof InvokeThis) {
-				return method;
+				return true;
 			}
 		}
-		return null;
+		return false;
+	}
+
+	
+	public static class CustomClassLoader extends ClassLoader{
+
+		public Class<?> loadClass(byte[] bytes)
+				throws ClassNotFoundException {
+
+			Class<?> c = defineClass(bytes, 0, bytes.length);
+
+			// name, bytes, 0, bytes.length);
+			resolveClass(c);
+			// name = c.getName();
+			// System.out.println("name " + name);
+			return c;
+		}
+
+	}
+	
+	private void deleteDir(final File dir) {
+		for (final File f : dir.listFiles()) {
+			if (f.isDirectory()) {
+				deleteDir(f);
+			} else {
+				f.delete();
+			}
+		}
+		dir.delete();
+	}
+
+	private static void debug(String output){
+		System.out.println(output);
 	}
 
 }

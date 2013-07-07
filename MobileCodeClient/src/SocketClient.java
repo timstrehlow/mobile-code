@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.net.UnknownHostException;
@@ -22,25 +23,82 @@ import wrapper.MethodWrapper;
  * @author Patrick
  */
 public class SocketClient implements Runnable {
-	private static final String SOURCE_FILE = "HelloWorld.java";
-	private static final String BYTE_FILE = "HelloWorld.class";
 
 	public static int count = 0;
-	private String name;
+	private JobWrapper job;
 
 	public static void main(String[] args) throws IOException {
+		JobWrapper jobTest = new JobWrapper();
+		jobTest.setFileName("Test.java");
 
-		SocketClient client = new SocketClient("1");
+		MethodWrapper methodAdd = new MethodWrapper();
+		methodAdd.setName("add");
+		methodAdd.setArgs(new Object[] { 3, 5 });
 
+		MethodWrapper methodMultiply = new MethodWrapper();
+		methodMultiply.setName("multiply");
+		methodMultiply.setArgs(new Object[] { 3, 5 });
+
+		jobTest.setMethodCalls(new MethodWrapper[] { methodAdd, methodMultiply });
+
+		new SocketClient(jobTest);
+
+		// HelloWorld.class:
+		// Name: de.tu_berlin.kbs.mwk.test.HelloWorld
+		// Method 1: public static java.lang.Object helloWorld()
+
+		JobWrapper jobHelloWorld = new JobWrapper();
+		jobHelloWorld.setFileName("HelloWorld.class");
+
+		MethodWrapper methodHello = new MethodWrapper();
+		methodHello.setName("helloWorld");
+
+		MethodWrapper[] methodsToCallHelloWorl = { methodHello };
+
+		jobHelloWorld.setMethodCalls(methodsToCallHelloWorl);
+
+		new SocketClient(jobHelloWorld);
+
+		// Echo.class:
+		// Name: de.tu_berlin.kbs.mwk.test.Echo
+		// Method 1: public static java.lang.String echo(java.lang.String s)
+		// Method 2: public static java.lang.String echo(java.lang.String s,
+		// java.lang.Integer n)
+			
+		JobWrapper jobEcho = new JobWrapper();
+		jobEcho.setFileName("Echo.class");
+
+		MethodWrapper methodEcho = new MethodWrapper();
+		methodEcho.setName("echo");
+		methodEcho.setArgs(new Object[] { "bla" });
+
+		MethodWrapper methodEcho2 = new MethodWrapper();
+		methodEcho2.setName("echo");
+		methodEcho2.setArgs(new Object[] { "bla", 3 });
+
+		MethodWrapper[] methodsToCallEcho = { methodEcho, methodEcho2 };
+
+		jobEcho.setMethodCalls(methodsToCallEcho);
+
+		new SocketClient(jobEcho);
+
+		// Annotated:
+		// Name: de.tu_berlin.kbs.mwk.test.Annotated
+		// Methods are marked by de.tu_berlin.kbs.reflect.InvokeThis
+		JobWrapper jobAnnotated = new JobWrapper();
+		jobAnnotated.setFileName("Annotated.class");
+
+		new SocketClient(jobAnnotated);
 	}
 
-	public SocketClient(String name) {
-		this.name = name;
+	public SocketClient(JobWrapper jw) {
+		this.job = jw;
 		new Thread(this).start();
 	}
 
 	@Override
 	public void run() {
+		ObjectInputStream inputStream = null;
 		ObjectOutputStream outputStream = null;
 		try {
 			SocketClient.count++;
@@ -51,18 +109,28 @@ public class SocketClient implements Runnable {
 					+ " / " + recievSocket.getPort() + ")");
 
 			outputStream = new ObjectOutputStream(sendSocket.getOutputStream());
-			JobWrapper job = new JobWrapper();
-			job.setCode(readCodeFromFile(new File(SOURCE_FILE)));
-			job.setFileName(SOURCE_FILE);
-			job.setBinaryClassName("HelloWorld");
-			MethodWrapper method = new MethodWrapper();
-			method.setName("doSomething");
-
-			MethodWrapper[] methodsToCall = { method };
-
-			job.setMethodCalls(methodsToCall);
+			job.setCode(readCodeFromFile(new File(job.getFileName())));
 
 			outputStream.writeObject(job);
+			
+			inputStream = new ObjectInputStream(recievSocket.getInputStream());
+
+			try {
+				JobWrapper receivedJob = (JobWrapper) inputStream.readObject();
+
+				System.out.println("Received Results - Filename: "
+						+ receivedJob.getFileName());
+				System.out.println();
+				for (final MethodWrapper mw : receivedJob.getMethodCalls()) {
+					System.out.println("Method: " + mw.getName());
+					System.out.println("Result: " + mw.getResult());
+					System.out.println();
+				}
+
+			} catch (ClassNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 
 		} catch (UnknownHostException ex) {
 			Logger.getLogger(SocketClient.class.getName()).log(Level.SEVERE,
@@ -74,6 +142,7 @@ public class SocketClient implements Runnable {
 			if (outputStream != null) {
 				try {
 					outputStream.close();
+					inputStream.close();
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
