@@ -105,9 +105,6 @@ public class SocketClient implements Runnable {
 			Socket recievSocket = new Socket("localhost", 4321);
 			Socket sendSocket = new Socket("localhost", 1234);
 
-			System.out.println("Connect with server (" + sendSocket.getPort()
-					+ " / " + recievSocket.getPort() + ")");
-
 			outputStream = new ObjectOutputStream(sendSocket.getOutputStream());
 			job.setCode(readCodeFromFile(new File(job.getFileName())));
 
@@ -118,7 +115,7 @@ public class SocketClient implements Runnable {
 			try {
 				JobWrapper receivedJob = (JobWrapper) inputStream.readObject();
 
-				System.out.println("Received Results - Filename: "
+				System.out.println("Client: Received Results - Filename: "
 						+ receivedJob.getFileName());
 				System.out.println();
 				for (final MethodWrapper mw : receivedJob.getMethodCalls()) {

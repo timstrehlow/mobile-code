@@ -1,7 +1,9 @@
 cd MobileCodeServer
+mkdir bin
 javac -sourcepath src -d bin src/server/Server.java
 echo "Server compiled"
 cd ../MobileCodeClient
+mkdir bin
 javac -sourcepath src -d bin src/SocketClient.java
 echo "Client compiled"
 echo "Starting server"

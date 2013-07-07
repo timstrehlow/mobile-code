@@ -81,6 +81,7 @@ public class Connection implements Runnable {
 				final JobWrapper job = (JobWrapper) inputObject;
 
 				final String classDir = "temp/" + id;
+				new File("temp").mkdir();
 				File codeFile = saveJobCodeFile(job, classDir);
 
 				char[] code = job.getCode();
@@ -89,8 +90,7 @@ public class Connection implements Runnable {
 					compileJavaFile(codeFile);
 					code = readCodeFromClassFile(classDir);
 				}
-				loadClassAndExecMethods(code, classDir,
- job);
+				loadClassAndExecMethods(code, classDir, job);
 
 				objectOutputStream.writeObject(job);
 				deleteDir(new File(classDir));
@@ -134,12 +134,20 @@ public class Connection implements Runnable {
 				// TODO Auto-generated catch block
 				e1.printStackTrace();
 			}
+
 			BufferedInputStream bis = new BufferedInputStream(fis);
 			try {
 				bis.read(mybytearray, 0, mybytearray.length);
 			} catch (IOException e1) {
 				// TODO Auto-generated catch block
 				e1.printStackTrace();
+			} finally {
+				try {
+					bis.close();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
 			}
 
 			char[] charArray = new char[(int) f.length()];
@@ -219,6 +227,7 @@ public class Connection implements Runnable {
 
 	private void loadClassAndExecMethods(char[] code, String classDir,
 			final JobWrapper job) {
+		System.out.println("Server: executing job " + job.getFileName());
 		MethodWrapper[] methods = job.getMethodCalls();
 		// Create a File object on the root of the directory containing the
 		// class file
@@ -251,6 +260,8 @@ public class Connection implements Runnable {
 									.getParameterTypes().length == mw.getArgs().length)) {
 						Object object = null;
 						try {
+							System.out.println("Server: invoking method "
+									+ method.getName());
 							object = method.invoke(mw.getInstance(),
 									mw.getArgs());
 						} catch (IllegalArgumentException e) {
@@ -261,7 +272,6 @@ public class Connection implements Runnable {
 							e.printStackTrace();
 						}
 
-						System.out.println("Result: " + object);
 						mw.setResult(object);
 						break;
 					}
@@ -277,6 +287,8 @@ public class Connection implements Runnable {
 				if (invokingMethod != null) {
 						try {
 						if (Modifier.isStatic(invokingMethod.getModifiers())) {
+							System.out.println("Server: invoking method "
+									+ invokingMethod.getName());
 							MethodWrapper mw = new MethodWrapper();
 							mw.setName(invokingMethod.getName());
 							object = invokingMethod.invoke(null, null);
@@ -292,9 +304,8 @@ public class Connection implements Runnable {
 							e.printStackTrace();
 					}
 
-						System.out.println("Result: " + object);
-							}
-						}
+				}
+			}
 
 		} catch (MalformedURLException e) {
 		} catch (ClassNotFoundException e) {
@@ -355,10 +366,6 @@ public class Connection implements Runnable {
 			}
 		}
 		dir.delete();
-	}
-
-	private static void debug(String output){
-		System.out.println(output);
 	}
 
 }
